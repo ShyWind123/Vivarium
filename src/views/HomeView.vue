@@ -52,40 +52,134 @@ const formattedTime = computed(() => {
 const going = ref(false)
 const optionsKey = ref(0)
 const intervalId = ref(null)
+const cntRecordIntervalId = ref(null) // 新增的定时器ID
+
 const startMovement = () => {
   const mainContainer = document.querySelector('.mainContainer');
   const containerWidth = mainContainer.clientWidth;
   const containerHeight = mainContainer.clientHeight;
+
   // 开始移动
   intervalId.value = setInterval(() => {
     if (intervalId.value === null) return;
-    for (let i = 0; i < items.length; i++) {
-      items[i].entity.forEach(icon => {
+    items.forEach(item => {
+      item.entity.forEach(icon => {
         const currentLeft = parseInt(icon.style.left, 10);
         const currentTop = parseInt(icon.style.top, 10);
 
-        const randomX = Math.floor(Math.random() * 20) - 10; // 随机偏移量在-10到10之间
-        const randomY = Math.floor(Math.random() * 20) - 10; // 随机偏移量在-10到10之间
+        // 探测最近的非自己类型的图标，范围为100px
+        let nearestIcon = null;
+        let minDistance = 100; // 将探测范围改为100px
+        const iconType = icon.className.match(/icon-caiquanshitoujiandaobushitou|icon-caiquanshitoujiandaobujiandao|icon-caiquanshitoujiandaobubu/)[0];
+        items.forEach(otherItem => {
+          otherItem.entity.forEach(otherIcon => {
+            if (icon !== otherIcon && iconType !== otherIcon.className.match(/icon-caiquanshitoujiandaobushitou|icon-caiquanshitoujiandaobujiandao|icon-caiquanshitoujiandaobubu/)[0]) {
+              const otherLeft = parseInt(otherIcon.style.left, 10);
+              const otherTop = parseInt(otherIcon.style.top, 10);
+              const distance = Math.sqrt((otherLeft - currentLeft) ** 2 + (otherTop - currentTop) ** 2);
+              if (distance < minDistance) {
+                minDistance = distance;
+                nearestIcon = otherIcon;
+              }
+            }
+          });
+        });
 
-        let newLeft = currentLeft + randomX;
-        let newTop = currentTop + randomY;
+        let moveX = 0, moveY = 0;
+        if (nearestIcon) {
+          const nearestLeft = parseInt(nearestIcon.style.left, 10);
+          const nearestTop = parseInt(nearestIcon.style.top, 10);
+          const nearestIconType = nearestIcon.className.match(/icon-caiquanshitoujiandaobushitou|icon-caiquanshitoujiandaobujiandao|icon-caiquanshitoujiandaobubu/)[0];
 
-        // 确保图标不会超出容器边界
-        if (newLeft < 20) newLeft = 20;
-        if (newLeft > containerWidth - 40) newLeft = containerWidth - 40;
-        if (newTop < 20) newTop = 20;
-        if (newTop > containerHeight - 40) newTop = containerHeight - 40;
+          if (iconType === 'icon-caiquanshitoujiandaobujiandao' && nearestIconType === 'icon-caiquanshitoujiandaobubu') {
+            moveX = nearestLeft > currentLeft ? 5 : -5;
+            moveY = nearestTop > currentTop ? 5 : -5;
+          } else if (iconType === 'icon-caiquanshitoujiandaobubu' && nearestIconType === 'icon-caiquanshitoujiandaobushitou') {
+            moveX = nearestLeft > currentLeft ? 5 : -5;
+            moveY = nearestTop > currentTop ? 5 : -5;
+          } else if (iconType === 'icon-caiquanshitoujiandaobushitou' && nearestIconType === 'icon-caiquanshitoujiandaobujiandao') {
+            moveX = nearestLeft > currentLeft ? 5 : -5;
+            moveY = nearestTop > currentTop ? 5 : -5;
+          } else {
+            moveX = nearestLeft > currentLeft ? -5 : 5;
+            moveY = nearestTop > currentTop ? -5 : 5;
+          }
+        } else {
+          // 当附近没有其他图标时，朝随机方向移动
+          moveX = Math.floor(Math.random() * 20) - 10;
+          moveY = Math.floor(Math.random() * 20) - 10;
+        }
+
+        let newLeft = currentLeft + moveX;
+        let newTop = currentTop + moveY;
+
+        // 确保图标不会超出容器边界，仅左右打通墙壁
+        if (newLeft < 0) newLeft = containerWidth + newLeft;
+        if (newLeft > containerWidth) newLeft = newLeft - containerWidth;
+        if (newTop < 0) newTop = 0;
+        if (newTop > containerHeight - 40) newTop = containerHeight - 40; // 留出一格图标高度的空间
 
         icon.style.left = `${newLeft}px`;
         icon.style.top = `${newTop}px`;
-      })
-    }
+
+        // 检测碰撞
+        items.forEach(item => {
+          item.entity.forEach(otherIcon => {
+            if (icon !== otherIcon && isColliding(icon, otherIcon)) {
+              const iconType = icon.className.match(/icon-caiquanshitoujiandaobushitou|icon-caiquanshitoujiandaobujiandao|icon-caiquanshitoujiandaobubu/)[0];
+              const otherIconType = otherIcon.className.match(/icon-caiquanshitoujiandaobushitou|icon-caiquanshitoujiandaobujiandao|icon-caiquanshitoujiandaobubu/)[0];
+              if (iconType === 'icon-caiquanshitoujiandaobujiandao' && otherIconType === 'icon-caiquanshitoujiandaobubu') {
+                updateIconAndCnt(icon, otherIcon, item, items[1]);
+              } else if (iconType === 'icon-caiquanshitoujiandaobubu' && otherIconType === 'icon-caiquanshitoujiandaobushitou') {
+                updateIconAndCnt(icon, otherIcon, item, items[2]);
+              } else if (iconType === 'icon-caiquanshitoujiandaobushitou' && otherIconType === 'icon-caiquanshitoujiandaobujiandao') {
+                updateIconAndCnt(icon, otherIcon, item, items[0]);
+              }
+            }
+          });
+        });
+      });
+    });
   }, 100);
+
+  // 每秒记录一次图标数量
+  cntRecordIntervalId.value = setInterval(() => {
+    items.forEach(item => {
+      item.cnts.push(item.cnt);
+    });
+    console.log(items.map(item => item.cnts))
+  }, 1000);
+};
+
+const updateIconAndCnt = (icon, otherIcon, item, targetItem) => {
+  otherIcon.className = icon.className;
+  item.entity = item.entity.filter(e => e !== otherIcon);
+  targetItem.entity.push(otherIcon);
+  item.cnt--;
+  targetItem.cnt++;
+
+  // 检查剩余的图标种类数量
+  const remainingTypes = items.filter(i => i.cnt > 0);
+  if (remainingTypes.length === 1) {
+    window.alert('只剩下一种图标了！');
+  }
 }
+
+const isColliding = (icon1, icon2) => {
+  const rect1 = icon1.getBoundingClientRect();
+  const rect2 = icon2.getBoundingClientRect();
+  return !(rect1.right < rect2.left ||
+    rect1.left > rect2.right ||
+    rect1.bottom < rect2.top ||
+    rect1.top > rect2.bottom);
+}
+
 const stopMovement = () => {
   clearInterval(intervalId.value);
   intervalId.value = null;
+  clearInterval(cntRecordIntervalId.value); // 清除记录数量的定时器
 }
+
 const startOption = {
   name: '开始',
   icon: 'icon-kaishi',
@@ -128,6 +222,7 @@ const startOption = {
     going.value = true;
   }
 }
+
 const stopOption = {
   name: '暂停',
   icon: 'icon-zanting',
@@ -142,6 +237,7 @@ const stopOption = {
     optionsKey.value++;
   }
 }
+
 const resetOption = {
   name: '重置',
   icon: 'icon-zhongzhi',
@@ -162,14 +258,15 @@ const resetOption = {
         entity.remove();
       })
       items[i].entity = [];
+      items[i].cnts = []; // 重置cnts数组
     }
   }
 }
+
 let options = [
   startOption,
   resetOption
 ]
-
 
 const itemCntKey = ref(0)
 let items = [
@@ -177,26 +274,31 @@ let items = [
     "name": "石头",
     "icon": 'icon-caiquanshitoujiandaobushitou',
     "cnt": 10,
-    "entity": []
+    "entity": [],
+    "cnts": []
   },
   {
     "name": "剪刀",
     "icon": 'icon-caiquanshitoujiandaobujiandao',
     "cnt": 10,
-    "entity": []
+    "entity": [],
+    "cnts": []
   },
   {
     "name": "布",
     "icon": 'icon-caiquanshitoujiandaobubu',
     "cnt": 10,
-    "entity": []
+    "entity": [],
+    "cnts": []
   },
 ]
+
 const addCnt = (idx) => {
   if (items[idx].cnt >= 20) return;
   items[idx].cnt++;
   itemCntKey.value++;
 }
+
 const subCnt = (idx) => {
   if (items[idx].cnt <= 5) return;
   items[idx].cnt--;
